@@ -1,0 +1,362 @@
+#! /bin/sh
+# build - contains build script that manages the high level build process
+# Distributed with nexware, licensed under the MIT license
+# See LICENSE
+
+# Argument variables
+prefix=
+debug=off
+disk=
+arch=
+board=
+action=build
+target=all
+
+archs="i386 riscv64 end"
+boards="bios mb2 virt end"
+disks="mbr gen iso end"
+actions="build prepare end"
+targets="all utils toolchain nexboot end"
+nextargets="nexboot"
+utiltargets="nexboot"
+
+# Parses an argument's data
+arghandle()
+{
+    # Grab actual argument
+    arg=$(echo "$1" | awk -F "=" '{print $1}')
+    # Now figure out what it is
+    if [ "$arg" = "--help" ]
+    then
+        # Print out help
+        echo "build - manages build process for nexware"
+        echo "Usage: ./build [OPTIONS]"
+        echo "Supported options:"
+        echo "--help\t\t\tprint out this screen"
+        echo "--arch=ARCH\t\tsets what arch is to be used"
+        echo "--archs\t\tprint all available archs"
+        echo "--target=TARGET\t\tsets what target is to be built"
+        echo "--action=ACTION\t\tspecifies what sould be done. Can be build or prepare"
+        echo "--debug\t\t\tif set, nexware will be built in debug mode"
+        echo "--prefix=DIR\t\tsets what directory nexware files should be copied to"
+        exit 0
+    elif [ "$arg" = "--archs" ]
+    then
+        echo "Available archs:"
+        echo "i386-bios-mbr i386-bios-iso i386-mb2-gen riscv64-virt-gen"
+        echo "Archs are split into 3 parts: the CPU architecture, the board for that cpu, and disk format. gen for disk format means it doesn't matter. Note that gen is only valid for mb2 and virt boards."
+    elif [ "$arg" = "--arch" ]
+    then
+        argdata=$(echo "$1" | awk -F "=" '{print $2}')
+        if [ -z "$argdata" ]
+        then
+            echo "build: --arch requires an argument"
+            exit 1
+        fi
+        # Here we go... validate and parse the arch
+        argarch=$(echo "$argdata" | awk -F "-" '{print $1}')
+        if [ -z "$argarch" ]
+        then
+            echo "build: arch not set"
+            exit 1
+        fi
+        argboard=$(echo "$argdata" | awk -F "-" '{print $2}')
+        if [ -z "$argboard" ]
+        then
+            echo "build: board not set"
+            exit 1
+        fi
+        argdisk=$(echo "$argdata" | awk -F "-" '{print $3}')
+        if [ -z "$argdisk" ]
+        then
+            echo "build: disk format not set"
+            exit 1
+        fi
+        # Now check if the contents are valid
+        for arch in $archs
+        do
+            if [ "$argarch" = "$arch" ] && [ "$argarch" != "end" ]
+            then
+                break
+            elif [ "$arch" = "end" ]
+            then
+                echo "build: Invalid arch set"
+                exit 1
+            fi
+        done
+        # Check board
+        for board in $boards
+        do
+            if [ "$argboard" = "$board" ] && [ "$argboard" != "end" ]
+            then
+                break
+            elif [ "$board" = "end" ]
+            then
+                echo "build: Invalid board set"
+                exit 1
+            fi
+        done
+        # Check if board and arch are compatible
+        if [ "$argarch" = "riscv64" ]
+        then
+            if [ "$argboard" != "virt" ]
+            then
+                echo "build: board and arch are incompatible!"
+                exit 1
+            fi
+        fi
+        if [ "$argarch" = "i386" ]
+        then
+            if [ "$argboard" != "bios" ]
+            then
+                echo "build: board and arch are incompatible!"
+                exit 1
+            fi
+        fi
+        # Now check the disk format
+        for disk in $disks
+        do
+            if [ "$argdisk" = "$disk" ] && [ "$argdisk" != "end" ]
+            then
+                break
+            elif [ "$disk" = "end" ]
+            then
+                echo "build: Invalid disk set"
+                exit 1
+            fi
+        done
+        # Now sanity checks
+        if [ "$argdisk" = "mbr" ]
+        then
+            if [ "$argarch" != "i386" ]
+            then
+                echo "build: disk and arch are incompatible"
+                exit 1
+            fi
+            if [ "$argboard" != "bios" ]
+            then
+                echo "build: disk and board are incompatible"
+                exit 1
+            fi
+        elif [ "$argdisk" = "iso" ]
+        then
+            if [ "$argarch" != "i386" ]
+            then
+                echo "build: disk and arch are incompatible"
+                exit 1
+            fi
+            if [ "$argboard" != "bios" ]
+            then
+                echo "build: disk and board are incompatible"
+                exit 1
+            fi
+        elif [ "$argdisk" = "pxe" ]
+        then
+            if [ "$argarch" != "i386" ]
+            then
+                echo "build: disk and arch are incompatible"
+                exit 1
+            fi
+            if [ "$argboard" != "bios" ]
+            then
+                echo "build: disk and board are incompatible"
+                exit 1
+            fi
+        elif [ "$argdisk" = "gen" ]
+        then
+            if [ "$argboard" != "virt" ] && [ "$argboard" != "mb2" ]
+            then
+                echo "build: disk and board are incompatible"
+                exit 1
+            fi
+        fi
+        # Now at last, it is valid. Go set the vars
+        board=$argboard
+        arch=$argarch
+        disk=$argdisk
+    # If the user specified what to do
+    elif [ "$arg" = "--action" ]
+    then
+        # Get the action wanted
+        argdata=$(echo "$1" | awk -F "=" '{print $2}')
+        if [ -z "$argdata" ]
+        then
+            echo "build: No action specified"
+            exit 1
+        fi
+        # Loop through the actions
+        for act in $actions
+        do
+            if [ "$argdata" = "$act" ] && [ "$argdata" != "end" ]
+            then
+                break
+            elif [ "$act" = "end" ]
+            then
+                echo "build: Invalid action set"
+                exit 1
+            fi
+        done
+        action=$argdata
+    # If the user specified what to build
+    elif [ "$arg" = "--target" ]
+    then
+        # Get the target wanted
+        argdata=$(echo "$1" | awk -F "=" '{print $2}')
+        if [ -z "$argdata" ]
+        then
+            echo "build: No target specified"
+            exit 1
+        fi
+        # Loop through the actions
+        for tar in $targets
+        do
+            if [ "$argdata" = "$tar" ] && [ "$argdata" != "end" ]
+            then
+                break
+            elif [ "$tar" = "end" ]
+            then
+                echo "build: Invalid target set"
+                exit 1
+            fi
+        done
+        target=$argdata
+    elif [ "$arg" = "--debug" ]
+    then
+        debug=all
+    elif [ "$arg" = "--prefix" ]
+    then
+        # Get the dir wanted
+        argdata=$(echo "$1" | awk -F "=" '{print $2}')
+        if [ -z "$argdata" ]
+        then
+            echo "build: No prefix specified"
+            exit 1
+        fi
+        prefix=$argdata
+    else
+        echo "build: Invalid argument sent"
+        exit 1
+    fi
+}
+
+# Setup vars for argument loop
+args=$@
+# Loop through the arguments
+for arg in $args
+do
+# Parse this argument
+arghandle $arg
+done
+# Make sure required arguments were sent
+# Check prefix
+if [ -z "$prefix" ] && [ "$action" = "prepare" ] && [ "$target" != "utils" ]
+then
+    echo "build: Prefix must be set"
+    exit 1
+fi
+# Check arch
+if [ "$action" = "prepare" ] && [ "$target" != "utils" ]
+then
+    if [ -z "$arch" ] || [ -z "$disk" ] || [ -z "$board" ]
+    then
+        echo "build: Arch must be set"
+        exit 1
+    fi
+fi
+
+# Parse cpus
+ncpu=$(nproc)
+
+# Now diverge execution based on action
+if [ "$action" = "prepare" ]
+then
+    # Create the prefix
+    if [ ! -d "$prefix" ] && [ "$target" != "utils" ]
+    then
+        mkdir -p $prefix
+    fi
+    # First, check if we need to build to toolchain
+    if [ "$target" = "toolchain" ]
+    then
+        # Switch to the prefix directory
+        cd $prefix
+        mkdir src && cd src
+        # Download gcc and binutils source
+        wget https://ftp.gnu.org/gnu/gcc/gcc-10.2.0/gcc-10.2.0.tar.xz
+        wget https://ftp.gnu.org/gnu/binutils/binutils-2.35.tar.xz
+    # If we want to install utilities
+    elif [ "$target" = "utils" ]
+    then
+        for dir in $utiltargets
+        do
+            cd ../$dir
+            ./build --action=prepare --target=utils
+        done
+    # If we want to build everything
+    elif [ "$target" = "all" ]
+    then
+        # Go through all Nexware projects first
+        for dir in $nextargets
+        do
+            cd ../$dir && rm -rf build-$arch && mkdir build-$arch && cd build-$arch
+            # Run the build script, checking the debug setting
+            if [ "$debug" = "all" ]
+            then
+                ../build --action=prepare --target=all --arch=$arch-$board-$disk --prefix=../$prefix --debug
+            else
+                ../build --action=prepare --target=all --arch=$arch-$board-$disk --prefix=../$prefix
+            fi
+        done
+    # If we want to build a certain target
+    else
+        # Figure out what type this target is
+        for ntar in $nextargets
+        do
+            # Check if this target is right
+            if [ "$ntar" = "$target" ]
+            then
+                cd ../$target && rm -rf build-$arch && mkdir build-$arch && cd build-$arch
+                # Run the build script, checking the debug setting
+                if [ "$debug" = "all" ]
+                then
+                    ../build --action=prepare --target=all --arch=$arch-$board-$disk --prefix=../$prefix --debug
+                else
+                    ../build --action=prepare --target=all --arch=$arch-$board-$disk --prefix=../$prefix
+                fi
+                # We are done
+                exit 1
+            fi
+        done
+    fi
+elif [ "$action" = "build" ]
+then
+    # Build the project(s) wanted
+    if [ "$target" = "all" ]
+    then
+        # Go through all Nexware projects first
+        for dir in $nextargets
+        do
+            cd ../$dir/build-$arch
+            # Run the build script
+            ../build --action=build --target=all
+        done
+    # If we want to build a certain target
+    else
+        # Figure out what type this target is
+        for ntar in $nextargets
+        do
+            # Check if this target is right
+            if [ "$ntar" = "$target" ]
+            then
+                cd ../$target/build-$arch
+                # Run the build script
+                ../build --action=build --target=all
+                # We are done
+                exit 1
+            fi
+        done
+    fi
+else
+    echo "build: Invalid action"
+    exit 1
+fi

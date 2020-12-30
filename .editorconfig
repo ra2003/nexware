@@ -1,0 +1,17 @@
+root=true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+
+[{README,LICENSE}]
+insert_final_newline = true
+
+[Makefile]
+indent_style = tab
+
+[*.{asm,c,h,cfg,inf}]
+indent_style = space
+indent_size = 4
+end_of_line = lf
