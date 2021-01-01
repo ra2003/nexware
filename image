@@ -34,20 +34,32 @@ size=$(expr $3 \* 1024)
 size=$(expr $size \* 1024)
 # Now create and format it
 dd if=/dev/zero of=$output bs=$size count=1
-
-# Partition it
-parted --script $output mklabel msdos mkpart p fat32 1 15M mkpart p ext2 16M ${3}M set 1 boot on
-
-# First, get the loopback device using kpartx and awk
-loopdev=$(kpartx -l $output | awk '{print $5; exit}' | awk -F '/' '{print $3}')
-# Setup the partitions
-kpartx -av $output
-sleep 3
-# Format boot partition
-mkfs.vfat -F 16 -s 4 /dev/mapper/${loopdev}p1
 sleep 1
+if [ "$disktype" = "mbr" ]
+then
+    # Partition it
+    parted --script $output mklabel msdos mkpart p ext2 1M ${3}M set 1 boot on
+fi
+sleep 1
+# Get loop device and setup the device
+loopdev=$(losetup -Pf --show $output)
+sleep 5
 # Format data partition
-mkfs.ext2 /dev/mapper/${loopdev}p2
-sleep 1
+mkfs.ext2 ${loopdev}p1
+sleep 2
+
+# Install GRUB
+mkdir fs
+mount ${loopdev}p1 fs
+sleep 2
+grub-install --no-floppy --root-directory=$PWD/fs $loopdev --target=i386-pc
+sleep 2
+umount fs
+rm -r fs
+
 # Delete partitions
-kpartx -d $output
+losetup -d $loopdev
+
+# Change ownership of file to caller
+name=$(logname)
+chown $name $output
