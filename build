@@ -11,7 +11,7 @@ board=
 action=build
 target=all
 
-archs="i386 riscv64 end"
+archs="i386 end"
 boards="legacy virt end"
 actions="build prepare end"
 targets="all toolchain micronex end"
@@ -40,7 +40,7 @@ arghandle()
     elif [ "$arg" = "--archs" ]
     then
         echo "Available archs:"
-        echo "i386-legacy riscv64-virt"
+        echo "i386-legacy"
         echo "Archs are split into 2 parts: the CPU architecture, and the board for that cpu"
     elif [ "$arg" = "--arch" ]
     then
@@ -87,23 +87,6 @@ arghandle()
                 exit 1
             fi
         done
-        # Check if board and arch are compatible
-        if [ "$argarch" = "riscv64" ]
-        then
-            if [ "$argboard" != "virt" ]
-            then
-                echo "build: board and arch are incompatible!"
-                exit 1
-            fi
-        fi
-        if [ "$argarch" = "i386" ]
-        then
-            if [ "$argboard" != "legacy" ]
-            then
-                echo "build: board and arch are incompatible!"
-                exit 1
-            fi
-        fi
         # Now at last, it is valid. Go set the vars
         board=$argboard
         arch=$argarch
@@ -182,23 +165,20 @@ arghandle $arg
 done
 # Make sure required arguments were sent
 # Check prefix
-if [ -z "$prefix" ]
+if [ -z "$prefix" ] && [ "$action" = "prepare" ]
 then
     echo "build: Prefix must be set"
     exit 1
 fi
 # Check arch
-if [ "$action" = "prepare" ]
+if [ -z "$arch" ] || [ -z "$board" ]
 then
-    if [ -z "$arch" ] || [ -z "$board" ]
-    then
-        echo "build: Arch must be set"
-        exit 1
-    fi
+    echo "build: Arch must be set"
+    exit 1
 fi
 
 # Parse cpus
-ncpu=$(nproc)
+ncpu=1
 
 # Now diverge execution based on action
 if [ "$action" = "prepare" ]
@@ -206,7 +186,7 @@ then
     # Create the prefix
     if [ ! -d "$prefix" ]
     then
-        mkdir -p $prefix
+        mkdir -p $prefix/boot
     fi
     # First, check if we need to build to toolchain
     if [ "$target" = "toolchain" ]

@@ -49,11 +49,14 @@ mkfs.ext2 ${loopdev}p1
 sleep 2
 
 # Install GRUB
+if [ "$4" != "--nogrub" ]
 mkdir fs
 mount ${loopdev}p1 fs
 sleep 2
 grub-install --no-floppy --root-directory=$PWD/fs $loopdev --target=i386-pc
 sleep 2
+cp conf/grub.cfg $PWD/fs/boot/grub/grub.cfg
+fi
 umount fs
 rm -r fs
 
