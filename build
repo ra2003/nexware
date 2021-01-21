@@ -8,11 +8,12 @@ prefix=
 debug=off
 arch=
 board=
+loglevel=normal
 action=build
 target=all
 
 archs="i386 end"
-boards="legacy virt end"
+boards="pc end"
 actions="build prepare end"
 targets="all toolchain micronex end"
 nextargets="micronex"
@@ -40,7 +41,7 @@ arghandle()
     elif [ "$arg" = "--archs" ]
     then
         echo "Available archs:"
-        echo "i386-legacy"
+        echo "i386-pc"
         echo "Archs are split into 2 parts: the CPU architecture, and the board for that cpu"
     elif [ "$arg" = "--arch" ]
     then
@@ -149,6 +150,10 @@ arghandle()
             exit 1
         fi
         prefix=$argdata
+    elif [ "$arg" = "--loglevel" ] 
+    then
+        # Get the level wanted
+        loglevel=$(echo "$1" | awk -F "=" '{print $2}')
     else
         echo "build: Invalid argument sent"
         exit 1
@@ -225,9 +230,9 @@ then
             # Run the build script, checking the debug setting
             if [ "$debug" = "all" ]
             then
-                ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix --debug
+                ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix --debug --loglevel=$loglevel
             else
-                ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix
+                ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix --loglevel=$loglevel
             fi
         done
     # If we want to build a certain target
@@ -242,9 +247,9 @@ then
                 # Run the build script, checking the debug setting
                 if [ "$debug" = "all" ]
                 then
-                    ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix --debug
+                    ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix --debug --loglevel=$loglevel
                 else
-                    ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix
+                    ../build --action=prepare --target=all --arch=$arch-$board --prefix=../$prefix --loglevel=$loglevel
                 fi
                 # We are done
                 exit 1
